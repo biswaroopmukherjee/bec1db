@@ -7,8 +7,9 @@ setup(name='bec1db',
       author_email='mail.biswaroop@gmail.com',
       license='MIT',
       packages=['bec1db'],
-       install_requires=[
-          'pandas',
-          'sqlite3'
+      install_requires=[
+          'pandas'
       ],
+      url='https://github.com/biswaroopmukherjee/bec1db',
+      download_url = 'https://github.com/biswaroopmukherjee/bec1db/tarball/0.1', 
       zip_safe=False)
