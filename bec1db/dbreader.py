@@ -256,6 +256,6 @@ class Tullia:
             unixtimes = str(unixtime_0 -10) + ' AND ' + str(unixtime_0 +10)
             sql_query = sql.format(columns=cols, unixtime_range=unixtimes)
             results = zeus.data_query(sql_query)
-            df = df.append(pd.DataFrame(results,columns=['imagename']+paramsin))
+            df = df.append(pd.DataFrame(results,columns=['imagename']+paramsin), ignore_index=True)
 
         return df
