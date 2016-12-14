@@ -210,7 +210,9 @@ def localloc():
 
 # Clean the parameters
 def clean_params(params):
-    paramsout = ['exp_'+re.sub('-| |=|\+|\.','', param) for param in params]
+    params = [re.sub('-| |=|\+|\.','',param) for param in params]
+    extra_params = ['snippet_time', 'Date', 'Time', 'year','month', 'day', 'hour', 'minute','second', 'unixtime']
+    paramsout = ['exp_'+ param for param in params if param not in extra_params]+[param for param in params if param in extra_params]
     paramsout = [str.strip(param).lower() for param in paramsout]
     return paramsout
 
@@ -249,13 +251,15 @@ class Tullia:
 
         # Get the parameters
         for image_time in image_times:
-            sql = '''SELECT snippet_time,{columns} FROM data
+            sql = '''SELECT {columns} FROM data
                         WHERE unixtime between {unixtime_range}'''
             cols = ', '.join(params)
             unixtime_0 = unix_time(image_time)
             unixtimes = str(unixtime_0 -10) + ' AND ' + str(unixtime_0 +10)
             sql_query = sql.format(columns=cols, unixtime_range=unixtimes)
             results = zeus.data_query(sql_query)
-            df = df.append(pd.DataFrame(results,columns=['imagename']+paramsin), ignore_index=True)
+            df = df.append(pd.DataFrame(results,columns=paramsin), ignore_index=True)
+
+        df['imagename'] = imagesin
 
         return df
