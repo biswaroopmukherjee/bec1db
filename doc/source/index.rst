@@ -11,7 +11,6 @@ bec1db Documentation
    :caption: Contents:
 
    docnb.ipynb
-   ***********
 
 
 

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='bec1db',
-      version='0.6',
+      version='0.7',
       description='The hackiest database reader ever',
       author='biswaroop',
       author_email='mail.biswaroop@gmail.com',
@@ -11,5 +11,4 @@ setup(name='bec1db',
           'pandas'
       ],
       url='https://github.com/biswaroopmukherjee/bec1db',
-      download_url = 'https://github.com/biswaroopmukherjee/bec1db/tarball/0.4',
       zip_safe=False)

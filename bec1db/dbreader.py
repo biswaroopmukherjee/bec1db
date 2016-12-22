@@ -7,6 +7,17 @@ import pandas as pd
 import datetime
 from sys import platform as _platform
 import sqlite3
+import urllib
+
+# Internet checker
+def internet_on():
+    try:
+        urllib.request.urlopen('http://216.58.192.142', timeout=1)
+        return True
+    except:
+        print('Connect to the internet to get the latest database!')
+        return False
+
 
 ###-------------------
 ###  SQLITE functions
@@ -93,7 +104,7 @@ def pathmake(main_folder, sub_folder):
 
     ## Check if server is connected
     if os.path.exists(madepath) is False:
-        raise FileNotFoundError('Server NOT connected! and file was not found at {}'.format(imagepath_backup))
+        raise FileNotFoundError("Couldn't connect to {}. Check if server is connected!".format(madepath))
 
     return madepath
 
@@ -135,6 +146,13 @@ def generate_dictionary(line):
 
     # Turn it into a dictionary and return
     return dict(zip(params[0::2], params[1::2]))
+
+# Read the clipboard
+def clipboard():
+    # A helper method to copy image names from the clipboard
+    df = pd.read_clipboard(names=['name'])
+    images = df['name'].tolist()
+    return images
 
 
 ## Convert files to dictionaries
@@ -224,12 +242,33 @@ class Tullia:
         self.refresh()
 
     def refresh(self):
-        ## Get the original database directory
+        ## Get the original database directory and version
         databasepath = pathmake(main_folder='Processed Data', sub_folder='Database')
         self.databasepath = os.path.join(databasepath,'Zeus.db')
-        ## Download the database
-        shutil.copy(self.databasepath, localloc())
+        remote_version = os.stat(self.databasepath).st_mtime
         self.localdbpath = os.path.join(localloc(),'Zeus.db')
+        ## Download the database
+        internet = internet_on()
+        if not internet and not os.path.exists(self.localdbpath):
+            print('You need to connect to the internet to download a db')
+        elif internet and not os.path.exists(self.localdbpath):
+            # Copy if no version exists locally
+            print('Downloading the database...')
+            shutil.copy(self.databasepath, localloc())
+            os.utime(self.localdbpath,(remote_version, remote_version))
+            print('Done')
+        elif internet and os.path.exists(self.localdbpath):
+            # Update db
+            local_version = os.stat(self.localdbpath).st_mtime
+            if local_version == remote_version:
+                return
+            else:
+                print('Updating the local database...')
+                shutil.copy(self.databasepath, localloc())
+                os.utime(self.localdbpath,(remote_version, remote_version))
+                print('Done')
+                return
+
 
     def image_query(self,imagesin,paramsin):
         # Clean the image names and parameter names
