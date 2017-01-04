@@ -41,3 +41,7 @@ The output dataframe looks like::
 To update the local database, run::
 
     tullia.refresh()
+
+If you've copied an image list from Data Explorer, you can paste the clipboard into a list variable by running::
+
+    images = db.clipboard()
