@@ -8,6 +8,7 @@ import datetime
 from sys import platform as _platform
 import sqlite3
 import urllib
+import numpy as np
 
 # Internet checker
 def internet_on():
@@ -228,7 +229,7 @@ def localloc():
 
 # Clean the parameters
 def clean_params(params):
-    params = [re.sub('-| |=|\+|\.','',param) for param in params]
+    params = [re.sub(' |=|\+|\.','',param) for param in params]
     extra_params = ['snippet_time', 'Date', 'Time', 'year','month', 'day', 'hour', 'minute','second', 'unixtime']
     paramsout = ['exp_'+ param for param in params if param not in extra_params]+[param for param in params if param in extra_params]
     paramsout = [str.strip(param).lower() for param in paramsout]
@@ -238,8 +239,19 @@ def clean_params(params):
 
 # The database api class
 class Tullia:
-    def __init__(self):
-        self.refresh()
+    def __init__(self, delta=10):
+        self.localdbpath = os.path.join(localloc(),'Zeus.db')
+        self.delta=delta
+        try:
+            self.refresh()
+        except:
+            print('The servers are not connected!')
+            if os.path.exists(self.localdbpath):
+                print('Using the local database copy. Could be outdated!')
+            else:
+                print()
+                raise FileNotFoundError("Couldn't find the local database! Connect to the internet and servers to get a copy.")
+
 
     def refresh(self):
         ## Get the original database directory and version
@@ -270,9 +282,14 @@ class Tullia:
                 return
 
 
-    def image_query(self,imagesin,paramsin):
+    def image_query(self,imagesin,paramsoriginals):
         # Clean the image names and parameter names
         images = [image[0:19] for image in imagesin]
+        if 'unixtime' in paramsoriginals:
+            paramsin = paramsoriginals
+        else:
+            paramsin = paramsoriginals + ['unixtime' ] # need the unixtimes to find a match
+
         params = clean_params(paramsin)
         zeus = Zeus(self.localdbpath)
 
@@ -294,11 +311,21 @@ class Tullia:
                         WHERE unixtime between {unixtime_range}'''
             cols = ', '.join(params)
             unixtime_0 = unix_time(image_time)
-            unixtimes = str(unixtime_0 -10) + ' AND ' + str(unixtime_0 +10)
+            unixtimes = str(unixtime_0 -self.delta) + ' AND ' + str(unixtime_0 +self.delta)
             sql_query = sql.format(columns=cols, unixtime_range=unixtimes)
             results = zeus.data_query(sql_query)
-            df = df.append(pd.DataFrame(results,columns=paramsin), ignore_index=True)
+            results_df = pd.DataFrame(results,columns=paramsin)
+            results_times = np.array(results_df['unixtime'].tolist())
+            if len(results_times)==0:
+                fillers = np.zeros((1,len(paramsin)))+np.nan
+                df_to_append = pd.DataFrame(fillers,columns=paramsin)
+            else:
+                matchloc = np.argmin(np.abs(results_times-unixtime_0))
+                df_to_append = results_df[matchloc:matchloc+1]
+            df = df.append(pd.DataFrame(df_to_append,columns=paramsin), ignore_index=True)
 
         df['imagename'] = imagesin
+        if not 'unixtime' in paramsoriginals:
+            df = df.drop('unixtime', 1)
 
         return df

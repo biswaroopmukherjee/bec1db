@@ -45,3 +45,7 @@ To update the local database, run::
 If you've copied an image list from Data Explorer, you can paste the clipboard into a list variable by running::
 
     images = db.clipboard()
+
+If you need to set the time offset between the image queried and the images in the database, use the `delta` keyword (the default is 10 and the units are seconds)::
+
+    tullia = db.Tullia(delta=15)
