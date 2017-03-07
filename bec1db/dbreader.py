@@ -9,6 +9,7 @@ from sys import platform as _platform
 import sqlite3
 import urllib
 import numpy as np
+import warnings
 
 # Internet checker
 def internet_on():
@@ -317,6 +318,7 @@ class Tullia:
             results_df = pd.DataFrame(results,columns=paramsin)
             results_times = np.array(results_df['unixtime'].tolist())
             if len(results_times)==0:
+                warnings.warn('Some of the images were not found in the database! There will be NaNs in your data.')
                 fillers = np.zeros((1,len(paramsin)))+np.nan
                 df_to_append = pd.DataFrame(fillers,columns=paramsin)
             else:
