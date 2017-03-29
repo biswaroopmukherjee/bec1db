@@ -78,6 +78,19 @@ class Zeus:
         conn.close()
         return result
 
+    ## Get all the columns
+    def columns_query(self):
+        conn = sqlite3.connect(self.databasepath)
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM data LIMIT 1')
+        db_columns = [description[0].lower() for description in cur.description]
+        conn.close()
+        params = [re.sub('exp_','',param) for param in db_columns]
+        return params
+
+
+
+
     ## Obliterate and re-make the data table
     def data_obliterate(self):
         conn = sqlite3.connect(self.databasepath)
@@ -139,7 +152,7 @@ def generate_dictionary(line):
     extra_params = ['snippet_time',snippet_time] + ['Date', img_date] + ['Time', img_time] +  ['year', int(img_yy)] + ['month', int(img_mm)] + ['day', int(img_dd)] + ['hour', int(img_hh)] + ['minute', int(img_mi)] + ['second', int(img_ss)] + ['unixtime',unix_time(timestr_to_datetime(snippet_time))]
 
     # Set up params as a list
-    paramline = re.sub('-| |=|\+','',current_line[1])
+    paramline = re.sub(' |=|\+','',current_line[1])
     paramline = re.split(';|,',paramline)[0:-1] # Split by ; or ,
     paramline[::2] = ['exp_'+re.sub('\.','',param) for param in paramline[::2]] # remove . from parameter name only
     paramline[1::2] = [float(param) for param in paramline[1::2]] # turn experimental parameters into floats
@@ -240,9 +253,10 @@ def clean_params(params):
 
 # The database api class
 class Tullia:
-    def __init__(self, delta=10):
+    def __init__(self, delta=10, connect=True):
         self.localdbpath = os.path.join(localloc(),'Zeus.db')
         self.delta=delta
+        self.connect=connect
         try:
             self.refresh()
         except:
@@ -275,6 +289,8 @@ class Tullia:
             local_version = os.stat(self.localdbpath).st_mtime
             if local_version == remote_version:
                 return
+            elif self.connect==False:
+                print('You have chosen to not update your database.')
             else:
                 print('Updating the local database...')
                 shutil.copy(self.databasepath, localloc())
@@ -283,51 +299,89 @@ class Tullia:
                 return
 
 
-    def image_query(self,imagesin,paramsoriginals):
-        # Clean the image names and parameter names
-        images = [image[0:19] for image in imagesin]
-        if 'unixtime' in paramsoriginals:
-            paramsin = paramsoriginals
+    def image_query(self,imagesin,paramsoriginals='*'):
+
+        ## For string imagename and string parameter
+        if type(imagesin)==str and type(paramsoriginals)==str and not paramsoriginals=='*':
+            imagename=imagesin
+            unixtime_0 = unix_time(timestr_to_datetime(imagename[0:19]))
+            unixtimes = str(int(unixtime_0 -self.delta)) + ' AND ' + str(int(unixtime_0 +self.delta))
+            sql = 'SELECT * from data where unixtime between {unixtime_range}'
+            sql_query = sql.format(unixtime_range=unixtimes)
+            zeus = Zeus(self.localdbpath)
+            dbcolumns = zeus.columns_query()
+            results = zeus.data_query(sql_query)
+            results_df = pd.DataFrame(results, columns=dbcolumns)
+            param = re.sub(' |=|\+|\.','',paramsoriginals)
+            param = str.strip(param).lower()
+            return results_df[param].tolist()[0]
+
+        ## for string imagename but all columns are wanted
+        elif type(imagesin)==str and paramsoriginals=='*':
+            imagename=imagesin
+            unixtime_0 = unix_time(timestr_to_datetime(imagename[0:19]))
+            unixtimes = str(int(unixtime_0 -self.delta)) + ' AND ' + str(int(unixtime_0 +self.delta))
+            sql = 'SELECT * from data where unixtime between {unixtime_range}'
+            sql_query = sql.format(unixtime_range=unixtimes)
+            zeus = Zeus(self.localdbpath)
+            dbcolumns = zeus.columns_query()
+            results = zeus.data_query(sql_query)
+            results_df = pd.DataFrame(results, columns=dbcolumns)
+            return results_df
+
+        ## Otherwise, return all
         else:
-            paramsin = paramsoriginals + ['unixtime' ] # need the unixtimes to find a match
+            # Clean the image names and parameter names
+            images = [image[0:19] for image in imagesin]
+            if 'unixtime' in paramsoriginals:
+                paramsin = paramsoriginals
+            else:
+                paramsin = paramsoriginals + ['unixtime' ] # need the unixtimes to find a match
 
-        params = clean_params(paramsin)
-        zeus = Zeus(self.localdbpath)
+            params = clean_params(paramsin)
 
-        # Convert the time strings to datetimes
-        try:
-            image_times = [timestr_to_datetime(image) for image in images]
-        except ValueError:
-            print('Some of the image names are not valid')
-            raise
-            return None
+            zeus = Zeus(self.localdbpath)
+
+            # Convert the time strings to datetimes
+            try:
+                image_times = [timestr_to_datetime(image) for image in images]
+            except ValueError:
+                print('Some of the image names are not valid')
+                raise
+                return None
 
 
-        # Make a new dataframe
-        df = pd.DataFrame(columns=['imagename']+paramsin)
+            # Make a new dataframe
+            df = pd.DataFrame(columns=['imagename']+paramsin)
 
-        # Get the parameters
-        for image_time in image_times:
-            sql = '''SELECT {columns} FROM data
-                        WHERE unixtime between {unixtime_range}'''
+            # Generate the SQL query
+            sql = '''SELECT {columns} FROM data WHERE unixtime between {unixtime_range}'''
+
+            timeranges = []
+            for image_time in image_times:
+                unixtime_0 = unix_time(image_time)
+                unixtimes = str(int(unixtime_0 -self.delta)) + ' AND ' + str(int(unixtime_0 +self.delta))
+                timeranges = timeranges + [unixtimes]
+
+            times = ' OR unixtime between '.join(timeranges)
             cols = ', '.join(params)
-            unixtime_0 = unix_time(image_time)
-            unixtimes = str(unixtime_0 -self.delta) + ' AND ' + str(unixtime_0 +self.delta)
-            sql_query = sql.format(columns=cols, unixtime_range=unixtimes)
+            sql_query = sql.format(columns=cols, unixtime_range=times)
+
+            # Query the DB
             results = zeus.data_query(sql_query)
             results_df = pd.DataFrame(results,columns=paramsin)
+
+            # Locate the requested images in the query results
             results_times = np.array(results_df['unixtime'].tolist())
-            if len(results_times)==0:
-                warnings.warn('Some of the images were not found in the database! There will be NaNs in your data.')
-                fillers = np.zeros((1,len(paramsin)))+np.nan
-                df_to_append = pd.DataFrame(fillers,columns=paramsin)
-            else:
+            for image_time in image_times:
+                unixtime_0 = unix_time(image_time)
                 matchloc = np.argmin(np.abs(results_times-unixtime_0))
                 df_to_append = results_df[matchloc:matchloc+1]
-            df = df.append(pd.DataFrame(df_to_append,columns=paramsin), ignore_index=True)
+                df = df.append(pd.DataFrame(df_to_append,columns=paramsin), ignore_index=True)
 
-        df['imagename'] = imagesin
-        if not 'unixtime' in paramsoriginals:
-            df = df.drop('unixtime', 1)
+            df['imagename'] = imagesin
 
-        return df
+            if not 'unixtime' in paramsoriginals:
+                df = df.drop('unixtime', 1)
+
+            return df

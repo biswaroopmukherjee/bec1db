@@ -49,3 +49,13 @@ If you've copied an image list from Data Explorer, you can paste the clipboard i
 If you need to set the time offset between the image queried and the images in the database, use the `delta` keyword (the default is 10 and the units are seconds)::
 
     tullia = db.Tullia(delta=15)
+
+You can also query all columns for an imagename by writing something like::
+
+    tullia.image_query('12-10-2016_23_52_56_TopA')
+
+This returns a dataframe with all parameter values related to that image. If you want a particular parameter, writing::
+
+    tullia.image_query('12-10-2016_23_52_56_TopB','RFspect')
+
+returns a number (in this case 76.032)
