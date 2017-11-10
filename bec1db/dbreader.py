@@ -14,7 +14,7 @@ import warnings
 # Internet checker
 def internet_on():
     try:
-        urllib.request.urlopen('http://216.58.192.142', timeout=1)
+        urllib.request.urlopen('http://17.172.224.47', timeout=1)
         return True
     except:
         print('Connect to the internet to get the latest database!')
