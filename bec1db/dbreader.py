@@ -221,7 +221,7 @@ def read_snippet_line(filename, line_to_read):
     return line_dict
 
 ## Define a local location to store the database
-def localloc():
+def localloc(lab='bec1'):
     # Get user home directory
     basepath = os.path.expanduser('~')
     # Find out the os
@@ -229,10 +229,10 @@ def localloc():
     # Platform dependent storage
     if _platform == 'darwin':
         # Mac OS X
-        localpath = os.path.join(basepath, 'Documents', 'My Programs', 'Database')
+        localpath = os.path.join(basepath, 'Documents', 'My Programs', 'Database', lab)
     elif _platform == 'win32' or _platform == 'cygwin':
         # Windows
-        localpath = os.path.join(basepath, 'Documents', 'My Programs', 'Database')
+        localpath = os.path.join(basepath, 'Documents', 'My Programs', 'Database', lab)
     else:
         # Unknown platform
         return None
@@ -249,14 +249,38 @@ def clean_params(params):
     paramsout = [str.strip(param).lower() for param in paramsout]
     return paramsout
 
+# copy the database using sftp if needed
+def copy_db(dbpath, localpath, lab='bec1', password=''):
+    if os.path.exists(dbpath):
+        shutil.copy(dbpath, localpath)
+    else:
+        if password=='':
+            raise ValueError('Please enter the server password. Hint Martin.')
+        else:
+            try:
+                ssh = paramiko.SSHClient()
+                ssh.load_system_host_keys()
+                ssh.connect('18.62.1.253', username='bec1admin', password=password)
+                sftp = ssh.open_sftp()
+            except:
+                raise IOError('Connection refused')
+                if lab=='bec1':
+                    basepath = 'Processed Data/Database'
+                elif lab=='fermi3':
+                    basepath = 'Processed Data/Fermi 3/Database'
+            sftp.get(basepath,localpath)
+            sftp.close()
+
 
 
 # The database api class
 class Tullia:
-    def __init__(self, delta=10, connect=True):
+    def __init__(self, delta=10, connect=True, lab='bec1', password=''):
         self.localdbpath = os.path.join(localloc(),'Zeus.db')
         self.delta=delta
         self.connect=connect
+        self.lab=lab
+        self.password=password
         try:
             self.refresh()
         except:
@@ -281,7 +305,7 @@ class Tullia:
         elif internet and not os.path.exists(self.localdbpath):
             # Copy if no version exists locally
             print('Downloading the database...')
-            shutil.copy(self.databasepath, localloc())
+            copy_db(self.databasepath, localloc(self.lab), lab=self.lab, password=self.password)
             os.utime(self.localdbpath,(remote_version, remote_version))
             print('Done')
         elif internet and os.path.exists(self.localdbpath):
@@ -293,7 +317,7 @@ class Tullia:
                 print('You have chosen to not update your database.')
             else:
                 print('Updating the local database...')
-                shutil.copy(self.databasepath, localloc())
+                copy_db(self.databasepath, localloc(self.lab), lab=self.lab, password=self.password)
                 os.utime(self.localdbpath,(remote_version, remote_version))
                 print('Done')
                 return
@@ -328,6 +352,60 @@ class Tullia:
             results = zeus.data_query(sql_query)
             results_df = pd.DataFrame(results, columns=dbcolumns)
             return results_df
+
+
+
+        ## return all columns for multiple images
+        elif paramsoriginals=='*':
+            # Clean the image names and parameter names
+            images = [image[0:19] for image in imagesin]
+            paramsin =  ['unixtime' ] # need the unixtimes to find a match
+            params = clean_params(paramsin)
+
+            zeus = Zeus(self.localdbpath)
+
+            # Convert the time strings to datetimes
+            try:
+                image_times = [timestr_to_datetime(image) for image in images]
+            except ValueError:
+                print('Some of the image names are not valid')
+                raise
+                return None
+
+
+            # Make a new dataframe
+            df = pd.DataFrame(columns=['imagename']+paramsin)
+
+            # Generate the SQL query
+            sql = '''SELECT * FROM data WHERE unixtime between {unixtime_range}'''
+
+            timeranges = []
+            for image_time in image_times:
+                unixtime_0 = unix_time(image_time)
+                unixtimes = str(int(unixtime_0 -self.delta)) + ' AND ' + str(int(unixtime_0 +self.delta))
+                timeranges = timeranges + [unixtimes]
+
+            times = ' OR unixtime between '.join(timeranges)
+            sql_query = sql.format(unixtime_range=times)
+
+            # Query the DB
+            cols = zeus.columns_query()
+            results = zeus.data_query(sql_query)
+            results_df = pd.DataFrame(results,columns=cols)
+
+            # Locate the requested images in the query results
+            results_times = np.array(results_df['unixtime'].tolist())
+            for image_time in image_times:
+                unixtime_0 = unix_time(image_time)
+                matchloc = np.argmin(np.abs(results_times-unixtime_0))
+                df_to_append = results_df[matchloc:matchloc+1]
+                df = df.append(pd.DataFrame(df_to_append,columns=cols), ignore_index=True)
+
+            df['imagename'] = imagesin
+
+
+            return df
+
 
         ## Otherwise, return all
         else:

@@ -1,4 +1,8 @@
 *.so
+*.txcopying
+*.ing
+*.egg-info
+ing
 
 # Distribution / packaging
 bin/
