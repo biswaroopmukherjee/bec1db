@@ -341,7 +341,7 @@ def copy_db(dbpath, localpath, lab='bec1', password=''):
 
 # The database api class
 class Tullia:
-    def __init__(self, delta=10, snippet=False, connect=True, lab='bec1', password=''):
+    def __init__(self, delta=10, snippet=True, connect=True, lab='bec1', password=''):
         self.localdbpath = os.path.join(localloc(),'Zeus.db')
         self.delta=delta
         self.connect=connect
